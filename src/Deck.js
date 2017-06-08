@@ -9,6 +9,12 @@ import {
 
 //Retrieves the screen size
 const SCREEN_WIDTH = Dimensions.get('window').width;
+//Determines how far to be swiped to be considered liked or disliked
+const SWIPE_THRESHOLD = 0.25 * SCREEN_WIDTH;
+//Sets timing of swipe
+const SWIPE_OUT_DURATION = 250;
+
+
 
 class Deck extends Component {
   constructor(props) {
@@ -24,7 +30,14 @@ class Deck extends Component {
       },
       //What to do when user releases finger
       onPanResponderRelease: (event, gesture) => {
-        this.resetPosition();
+        if (gesture.dx > SWIPE_THRESHOLD) {
+          //forces the card off the screen
+          this.forceSwipe('right');
+        } else if (gesture.dx < -SWIPE_THRESHOLD) {
+          this.forceSwipe('left');
+        } else {
+          this.resetPosition();
+        }
       }
     });
     //Can also do this without state so you don't mutate it
@@ -33,8 +46,30 @@ class Deck extends Component {
     this.state = { panResponder, position };
   }
 
+  forceSwipe(direction) {
+    //passing in right or left to change animation with swipe direction
+    //ternary expression, returns true, then go right, if not left
+    const x = direction === 'right' ? SCREEN_WIDTH : -SCREEN_WIDTH;
+    //More linear than spring, passing duration for animation
+    Animated.timing(this.state.position, {
+      //Since x is equal to SCREEN_WIDTH OR -SCREEN-WIDTH
+      //you can refactor from x: x to just x
+      toValue: { x, y: 0 },
+      duration: SWIPE_OUT_DURATION
+      //callback function to start action after card has been swiped
+    }).start(() => this.onSwipeComplete(direction));
+  }
+
+  onSwipeComplete (direction) {
+    const { onSwipeLeft, onSwipeRight } = this.props;
+    //ternary
+    direction === 'right' ? onSwipeRight() : onSwipeLeft();
+
+  }
+
   //reset position to original animated position
   resetPosition() {
+    //"Spring" into position
     Animated.spring(this.state.position, {
       toValue: { x: 0, y: 0 }
     }).start();
