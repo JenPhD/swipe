@@ -4,7 +4,9 @@ import {
   Animated,
   PanResponder,
   //Dimensions used to get the width or height of device screen
-  Dimensions
+  Dimensions,
+  LayoutAnimation,
+  UIManager
 } from 'react-native';
 
 //Retrieves the screen size
@@ -17,6 +19,12 @@ const SWIPE_OUT_DURATION = 250;
 
 
 class Deck extends Component {
+  //if onSwipeRight has no value it is assigned to empty function
+  static defaultProps = {
+    onSwipeRight: () => {},
+    onSwipeLeft: () => {}
+  };
+
   constructor(props) {
     super(props);
 
@@ -43,7 +51,23 @@ class Deck extends Component {
     //Can also do this without state so you don't mutate it
     //this.position = position;
     //But, this is the way the docs read
-    this.state = { panResponder, position };
+    this.state = { panResponder, position, index: 0 };
+  }
+  //comparing the current set of props with
+  //the next set of props
+  componentWillReceiveProps(nextProps) {
+    if(nextProps.data !== this.props.data) {
+      this.setState({ index: 0 })
+    }
+  }
+
+  //As the card swipes and component updates
+  //adds spring animation to the new render
+  componentWillUpdate() {
+    //For Android
+    UIManager.setLayoutAnimationEnabledExperimental &&
+      UIManager.setLayoutAnimationEnabledExperimental(true);
+    LayoutAnimation.spring();
   }
 
   forceSwipe(direction) {
@@ -61,10 +85,15 @@ class Deck extends Component {
   }
 
   onSwipeComplete (direction) {
-    const { onSwipeLeft, onSwipeRight } = this.props;
+    const { onSwipeLeft, onSwipeRight, data } = this.props;
+    const item = data[this.state.index];
     //ternary
-    direction === 'right' ? onSwipeRight() : onSwipeLeft();
-
+    direction === 'right' ? onSwipeRight(item) : onSwipeLeft(item);
+    //reset the position of the next card
+    this.state.position.setValue({ x: 0, y: 0 });
+    //re-setting the value of state and moving to next indexed card
+    //++ will not work because you don't want to mutate state
+    this.setState({ index: this.state.index + 1 });
   }
 
   //reset position to original animated position
@@ -104,20 +133,42 @@ class Deck extends Component {
   }
 
   renderCards() {
-    return this.props.data.map((item, index) => {
-      if( index === 0 ) {
+    //if there are no more cards left to swipe
+    if (this.state.index >= this.props.data.length) {
+      return this.props.renderNoMoreCards();
+    }
+
+    return this.props.data.map((item, i) => {
+      if(i < this.state.index) { return null; }
+      //i is keeping track of the count on index of the card
+      //this.state.index is the value of the index
+      // in the current piece of state
+      if( i === this.state.index ) {
         return (
           <Animated.View
             key={item.id}
-            style={this.getCardStyle()}
+            style={[this.getCardStyle(), styles.cardStyle]}
             {...this.state.panResponder.panHandlers}
           >
             {this.props.renderCard(item)}
           </Animated.View>
         );
       }
-      return this.props.renderCard(item);
-    });
+
+      // cards pushed 10 * the number it is away from
+      //becoming the top card in the stack (i-this.state.index)
+      //to make it appear like a cascading stack
+      return (
+        <Animated.View
+          key={item.id}
+          style={[styles.cardStyle, { top: 10 * (i - this.state.index) }]}
+        >
+          {this.props.renderCard(item)}
+        </Animated.View>
+      );
+      //reverses the rendering order so item 1
+      // appears on top of stack
+    }).reverse();
   }
 
   render() {
@@ -128,5 +179,12 @@ class Deck extends Component {
     );
   }
 }
+
+const styles = {
+  cardStyle: {
+    position: 'absolute',
+    width: SCREEN_WIDTH
+  }
+};
 
 export default Deck;
